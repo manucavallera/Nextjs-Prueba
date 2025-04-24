@@ -1,29 +1,109 @@
+"use client";
 import { redirect } from "next/navigation";
-import { FaClock, FaSignal, FaUser, FaLink } from "react-icons/fa";
+import { useParams } from "next/navigation";
+import {
+  FaClock,
+  FaSignal,
+  FaUser,
+  FaLink,
+  FaHeart,
+  FaRegHeart,
+} from "react-icons/fa";
+import { useState, useEffect } from "react";
+import { addFavorite } from "@/utils/api";
 
-export default async function RecursoPage({
-  params,
-}: {
-  params: { documentId: string };
-}) {
-  const { documentId } = params;
+interface Recurso {
+  Titulo: string;
+  Descripcion: string;
+  Contenido: string;
+  Tipo: string;
+  Miniatura?: {
+    data?: {
+      attributes?: {
+        url: string;
+        alternativeText?: string;
+      };
+    };
+  };
+  Duracion: string;
+  Dificultad: string;
+  Autor: string;
+  URL: string;
+}
+
+// Usar el hook useParams para obtener el parámetro de la URL
+export default function RecursoPage() {
+  const params = useParams();
+  // Asegurar que documentId sea siempre string
+  const documentId = Array.isArray(params.documentId)
+    ? params.documentId[0]
+    : params.documentId;
 
   if (!documentId) {
     return redirect("/recursos");
   }
+  const [recurso, setRecurso] = useState<Recurso | null>(null);
+  const [isFavorited, setIsFavorited] = useState(false);
 
-  const apiUrl = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/recursos-de-aprendizajes?filters[documentId][$eq]=${documentId}&populate=*`;
-  const res = await fetch(apiUrl);
+  // Función para obtener el estado de favorito desde localStorage
+  const getFavoriteStatus = () => {
+    const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+    return favorites.includes(documentId);
+  };
 
-  if (!res.ok) {
-    return redirect("/recursos");
-  }
+  // Función para actualizar el estado de favoritos en localStorage
+  const updateFavoriteStatus = (isFavorited: boolean) => {
+    const favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+    if (isFavorited) {
+      favorites.push(documentId);
+    } else {
+      const index = favorites.indexOf(documentId);
+      if (index > -1) {
+        favorites.splice(index, 1);
+      }
+    }
+    localStorage.setItem("favorites", JSON.stringify(favorites));
+  };
 
-  const data = await res.json();
-  const recurso = data.data[0];
+  useEffect(() => {
+    const fetchRecurso = async () => {
+      const apiUrl = `${process.env.NEXT_PUBLIC_STRAPI_URL}/api/recursos-de-aprendizajes?filters[documentId][$eq]=${documentId}&populate=*`;
+      const res = await fetch(apiUrl);
+
+      if (!res.ok) {
+        return redirect("/recursos");
+      }
+
+      const data = await res.json();
+      const fetchedRecurso = data.data[0];
+
+      if (!fetchedRecurso) {
+        return redirect("/recursos");
+      }
+
+      setRecurso(fetchedRecurso);
+      setIsFavorited(getFavoriteStatus()); // Inicializa el estado de favorito
+    };
+
+    fetchRecurso();
+  }, [documentId]);
+
+  const toggleFavorite = async () => {
+    const userId = "usuario1"; // Obtén el `userId` real de tu sistema de autenticación
+    try {
+      // Usa la función de addFavorite si necesitas realizar alguna lógica adicional con el backend
+      const response = await addFavorite(userId, documentId);
+      if (response) {
+        setIsFavorited(!isFavorited); // Alterna el estado de favorito
+        updateFavoriteStatus(!isFavorited); // Actualiza el estado en localStorage
+      }
+    } catch (error) {
+      console.error("Error al actualizar el estado de favorito", error);
+    }
+  };
 
   if (!recurso) {
-    return redirect("/recursos");
+    return <div>Cargando...</div>; // O un spinner de carga
   }
 
   const {
@@ -89,10 +169,20 @@ export default async function RecursoPage({
             />
           </div>
         )}
-
         <div className='p-6'>
           <h1 className='text-3xl font-bold mb-2 text-gray-800'>{Titulo}</h1>
           <p className='text-gray-600 mb-4'>{Descripcion}</p>
+          <button
+            onClick={toggleFavorite}
+            className='flex items-center gap-2 mb-4'
+          >
+            {isFavorited ? (
+              <FaHeart className='text-red-600' />
+            ) : (
+              <FaRegHeart className='text-gray-600' />
+            )}
+            {isFavorited ? "Eliminar de Favoritos" : "Agregar a Favoritos"}
+          </button>
           <div className='text-sm text-gray-500 mb-4 flex gap-6'>
             <span className='flex items-center gap-1'>
               <FaClock className='text-gray-400' /> {Duracion}
